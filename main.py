@@ -1,5 +1,5 @@
-"""
-Whop Content Rewards - Clipping Bot V2 - Fixed
+  """
+Whop Clipping Bot V3 - FINAL FIX
 """
 import os, time, requests, traceback
 
@@ -10,139 +10,88 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_USER = os.getenv("TELEGRAM_USER", "")
 
 def send_telegram(msg):
-    if not TELEGRAM_TOKEN or not TELEGRAM_USER:
-        print("Telegram not configured")
-        return
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-        # جرب إرسال كـ chat_id
-        data = {"chat_id": TELEGRAM_USER, "text": msg[:4000]}
-        r = requests.post(url, json=data, timeout=15)
-        print(f"Telegram response: {r.text[:200]}")
-        if not r.ok:
-            # لو فشل، جرب @username
-            data["chat_id"] = f"@{TELEGRAM_USER.replace('@','')}" if not TELEGRAM_USER.startswith('@') else TELEGRAM_USER
-            r2 = requests.post(url, json=data, timeout=15)
-            print(f"Telegram retry: {r2.text[:200]}")
+        requests.post(url, json={"chat_id": TELEGRAM_USER, "text": msg[:4000], "parse_mode": "Markdown"}, timeout=15)
     except Exception as e:
-        print(f"Telegram error: {e}")
+        print(f"Telegram error {e}")
 
 def hunt_whop():
-    print("🔍 يبدأ صيد حملات Whop...")
-    send_telegram("🚀 بدأ الوكيل يفحص Whop...")
-    
+    send_telegram("🚀 *بدأ الفحص...* جاري تسجيل الدخول لـ Whop")
     try:
         from playwright.sync_api import sync_playwright
-        
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
-            context = browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-            page = context.new_page()
+            page = browser.new_page()
             
-            # صفحة فارغة لعمل سكرين شوت حتى لو فشل كل شيء (عشان يختفي التحذير)
-            page.goto("https://example.com")
+            print("Opening Whop login...")
+            page.goto("https://whop.com/login/", timeout=90000)
+            page.wait_for_timeout(5000)
             page.screenshot(path="campaigns.png")
             
+            # ابحث عن حقل الإيميل بأي طريقة
             try:
-                print(f"Logging in with {WHOP_EMAIL}")
-                page.goto("https://whop.com/login/", timeout=60000)
-                page.wait_for_timeout(3000)
-                
-                # جرب كل الاحتمالات لحقول تسجيل الدخول
-                email_selectors = ['input[type="email"]', 'input[name="email"]', '#email']
-                for sel in email_selectors:
-                    if page.locator(sel).count() > 0:
-                        page.fill(sel, WHOP_EMAIL, timeout=5000)
-                        break
-                
-                pass_selectors = ['input[type="password"]', 'input[name="password"]', '#password']
-                for sel in pass_selectors:
-                    if page.locator(sel).count() > 0:
-                        page.fill(sel, WHOP_PASS, timeout=5000)
-                        break
-                
-                # اضغط زر تسجيل الدخول
-                page.locator('button:has-text("Log in"), button:has-text("Sign in"), button[type="submit"]').first.click(timeout=10000)
-                page.wait_for_timeout(7000)
-                
-                print(f"After login URL: {page.url}")
-                print(f"Page title: {page.title()}")
-                
-                # اذهب لصفحة المكافآت
-                page.goto("https://whop.com/discover/content-rewards/", timeout=60000)
-                page.wait_for_timeout(8000)
-                
-                page.screenshot(path="campaigns.png", full_page=True)
-                text = page.locator("body").inner_text()
-                print(f"Got text length: {len(text)}")
-                
-                browser.close()
-                return text[:8000]
-                
+                email_input = page.locator('input[type="email"], input[name="email"], input[placeholder*="Email" i]').first
+                email_input.wait_for(state="visible", timeout=15000)
+                email_input.fill(WHOP_EMAIL)
+                print("Email filled")
             except Exception as e:
-                err = traceback.format_exc()[-2000:]
-                print(f"Playwright inner error: {err}")
-                try:
-                    page.screenshot(path="campaigns.png", full_page=True)
-                except:
-                    pass
-                browser.close()
-                return f"خطأ داخل المتصفح: {e}\n{err}"
-                
-    except Exception as e:
-        err = traceback.format_exc()[-2000:]
-        print(f"General error: {err}")
-        # أنشئ صورة فارغة عشان ما يطلع تحذير
-        try:
-            from PIL import Image
-            Image.new('RGB', (800, 600), color='black').save('campaigns.png')
-        except:
-            open('campaigns.png','w').close()
-        return f"خطأ عام: {e}\n{err}"
+                print(f"Email fill failed: {e}")
+                # جرب الطريقة الثانية
+                page.get_by_placeholder("Email").fill(WHOP_EMAIL, timeout=10000)
 
-def analyze_with_gemini(text):
-    if not GEMINI_KEY:
-        return "GEMINI_KEY غير موجود"
-    
+            page.wait_for_timeout(1000)
+            
+            # ابحث عن حقل الباسورد
+            try:
+                pass_input = page.locator('input[type="password"]').first
+                pass_input.wait_for(state="visible", timeout=15000)
+                pass_input.fill(WHOP_PASS)
+                print("Password filled")
+            except Exception as e:
+                print(f"Pass fill failed: {e}")
+                page.get_by_placeholder("Password").fill(WHOP_PASS, timeout=10000)
+
+            page.wait_for_timeout(1000)
+            
+            # اضغط زر الدخول
+            page.locator('button[type="submit"]').first.click(timeout=10000)
+            page.wait_for_timeout(8000)
+            
+            print(f"URL after login: {page.url}")
+            
+            # روح لصفحة المكافآت
+            page.goto("https://whop.com/discover/content-rewards/", timeout=90000)
+            page.wait_for_timeout(10000)
+            page.screenshot(path="campaigns.png", full_page=True)
+            
+            text = page.inner_text("body")
+            print(f"Text len: {len(text)}")
+            browser.close()
+            return text
+
+    except Exception as e:
+        err = traceback.format_exc()[-3000:]
+        print(err)
+        try:
+            page.screenshot(path="campaigns.png", full_page=True)
+        except: pass
+        return f"فشل: {e}\n{err}"
+
+def analyze(text):
+    if not GEMINI_KEY: return "لا يوجد مفتاح Gemini"
     try:
-        # المكتبة الجديدة
         from google import genai
         client = genai.Client(api_key=GEMINI_KEY)
-        
-        prompt = f"""
-        حلل هذا النص من Whop Content Rewards واختر أفضل 3 حملات للـ clipping:
-        المعايير: أعلى سعر لكل 1000 مشاهدة + ميزانية متبقية + مسموح النشر على تيك توك/ريلز/يوتيوب
-        استخرج: اسم الحملة، السعر، الشروط (هاشتاجات، ذكر @whop، إلخ)
-        
-        النص:
-        {text[:6000]}
-        """
-        response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
-        return response.text
+        prompt = f"حلل حملات Whop هذه واعطني أفضل 3 للقص والنشر (السعر، الشروط، الهاشتاقات):\n\n{text[:7000]}"
+        res = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
+        return res.text
     except Exception as e:
-        try:
-            # محاولة بالمكتبة القديمة كـ fallback
-            import google.generativeai as genai_old
-            genai_old.configure(api_key=GEMINI_KEY)
-            model = genai_old.GenerativeModel('gemini-1.5-flash')
-            resp = model.generate_content(f"حلل حملات Whop: {text[:4000]}")
-            return resp.text + "\n\n(بالمكتبة القديمة)"
-        except Exception as e2:
-            return f"خطأ Gemini: {e} / Fallback: {e2}"
+        return f"خطأ Gemini: {e}"
 
 if __name__ == "__main__":
-    text = hunt_whop()
-    analysis = analyze_with_gemini(text)
-    
-    final_msg = f"""📊 *نتيجة فحص Whop*
-
-*التحليل:*
-{analysis[:2500]}
-
-*النص الخام (أول 1500 حرف):*
-{text[:1500]}
-"""
-    print(final_msg)
-    send_telegram(final_msg)
-    print("انتهى")
-        
+    t = hunt_whop()
+    a = analyze(t)
+    final = f"📊 *تحليل Whop:*\n\n{a[:3000]}\n\n---\n*خام (500 حرف):*\n{t[:500]}"
+    print(final)
+    send_telegram(final)
