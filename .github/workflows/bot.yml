@@ -1,25 +1,25 @@
-name: Whop Clipping Bot
+name: Whop Clipping Bot V2
 
 on:
   schedule:
-    - cron: '0 */4 * * *'  # يشتغل كل 4 ساعات تلقائيا
-  workflow_dispatch:  # تقدر تشغله يدويا من جوالك بضغطة
+    - cron: '0 */4 * * *'
+  workflow_dispatch:
 
 jobs:
   hunt:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
           
-      - name: Install Tools (مجاني)
+      - name: Install Tools
         run: |
-          pip install playwright google-generativeai requests
-          playwright install chromium
+          pip install playwright google-genai requests pillow
+          playwright install chromium --with-deps
           
       - name: Run Whop Hunter
         env:
@@ -32,8 +32,10 @@ jobs:
           python main.py
           
       - name: Upload Screenshot
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: whop-screenshot
           path: campaigns.png
+          if-no-files-found: warn
           
