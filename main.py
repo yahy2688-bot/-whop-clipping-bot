@@ -37,7 +37,7 @@ def analyze(t):
     try:
         from google import genai
         c=genai.Client(api_key=GEMINI_KEY)
-        r=c.models.generate_content(model="gemini-2.0-flash", contents=f"حلل حملات Whop واختر افضل 3: {t[:7000]}")
+        r=c.models.generate_content(model="gemini-3.6-flash", contents=f"حلل حملات Whop واختر افضل 3: {t[:7000]}")
         return r.text
     except Exception as e:
         return f"Gemini خطأ: {e}"
