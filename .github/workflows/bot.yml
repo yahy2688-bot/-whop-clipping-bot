@@ -1,41 +1,30 @@
-name: Whop Clipping Bot V2
-
+name: ClippingProfitBot
 on:
-  schedule:
-    - cron: '0 */4 * * *'
   workflow_dispatch:
-
+  schedule:
+    - cron: '0 */6 * * *'
 jobs:
   hunt:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      
-      - name: Setup Python
-        uses: actions/setup-python@v6
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          
-      - name: Install Tools
+      - name: Install
+        run: pip install requests google-genai
+      - name: Run bot
         run: |
-          pip install playwright google-genai requests pillow
-          playwright install chromium --with-deps
-          
-      - name: Run Whop Hunter
+          touch campaigns.png
+          python main.py
         env:
-          WHOP_EMAIL: ${{ secrets.WHOP_EMAIL }}
-          WHOP_PASS: ${{ secrets.WHOP_PASS }}
-          GEMINI_KEY: ${{ secrets.GEMINI_KEY }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_USER: ${{ secrets.TELEGRAM_USER }}
-        run: |
-          python main.py
-          
-      - name: Upload Screenshot
+          GEMINI_KEY: ${{ secrets.GEMINI_KEY }}
+      - name: Upload screenshot
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: whop-screenshot
+          name: campaigns
           path: campaigns.png
           if-no-files-found: warn
-          
