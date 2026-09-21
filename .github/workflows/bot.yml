@@ -12,8 +12,10 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install
-        run: pip install requests google-generativeai
-      - name: Run bot
+        run: |
+          pip install requests playwright
+          playwright install chromium --with-deps
+      - name: Run
         run: |
           touch campaigns.png
           python main.py
@@ -21,9 +23,8 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_USER: ${{ secrets.TELEGRAM_USER }}
           GEMINI_KEY: ${{ secrets.GEMINI_KEY }}
-      - name: Upload screenshot
+      - uses: actions/upload-artifact@v4
         if: always()
-        uses: actions/upload-artifact@v4
         with:
           name: campaigns
           path: campaigns.png
