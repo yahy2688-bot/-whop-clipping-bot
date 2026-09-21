@@ -8,10 +8,8 @@ GEMINI_KEY=os.getenv("GEMINI_KEY","")
 VIDEO_URL=os.getenv("VIDEO_URL","").strip()
 
 def send(m):
-    try:
-        requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
-        json={"chat_id":TELEGRAM_USER,"text":str(m)[:3900]}, timeout=15, verify=False)
-    except: pass
+    requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
+    json={"chat_id":TELEGRAM_USER,"text":str(m)[:3900]}, timeout=15, verify=False)
 
 def gemini_generate(prompt):
     if not GEMINI_KEY: return "🔥 Viral Clip! #fyp #viral #clipping"
@@ -19,7 +17,7 @@ def gemini_generate(prompt):
         url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent?key={GEMINI_KEY}"
         r = requests.post(url, json={"contents":[{"parts":[{"text":prompt}]}]}, timeout=15, verify=False)
         return r.json()['candidates'][0]['content']['parts'][0]['text']
-    except: return "🔥 VIRAL! #fyp #viral #money"
+    except: return "🔥 VIRAL! #fyp #viral"
 
 def get_updates(offset=0):
     try:
@@ -29,122 +27,94 @@ def get_updates(offset=0):
 
 def extract_url(text):
     m = re.search(r'(https?://[^\s]+)', text)
-    if m:
-        u = m.group(1)
-        if "youtube.com" in u or "youtu.be" in u or "drive.google.com" in u or "dropbox.com" in u or ".mp4" in u:
-            return u
-    return None
+    return m.group(1) if m else None
 
-# === 1. لو ما في رابط - اطلب من المستخدم في تليجرام ===
+# لو ما في رابط - اطلب من المستخدم
 if not VIDEO_URL:
-    best = {"name":"Hustlers University","price":12,"link":"https://whop.com/hustlersuniversity"}
+    # حملات حقيقية شغالة الآن
+    campaigns = [
+        {"name":"Clip Farm (Tate)","price":"$10/1K","link":"https://whop.com/clip-farm/"},
+        {"name":"Clipping Culture","price":"$10/1K","link":"https://app.contentrewards.cc/discover"},
+        {"name":"Reach Clipping","price":"$10/1K","link":"https://app.contentrewards.cc/discover"},
+    ]
+    best = campaigns[0]
 
-    send(f"""🎯 *أفضل حملة اليوم: {best['name']} - ${best['price']}/1K*
+    send(f"""🎯 *أفضل حملة اليوم: {best['name']} - {best['price']}*
 
-👇 *المطلوب:*
-1. ادخل رابط الحملة:
+⚠️ الرابط اللي أرسلته لك قبل كان غلط - هذا هو الصح:
+
+👇 *اذهب الى رابط الحملة الصحيح:*
 {best['link']}
 
-2. انسخ رابط الفيديو الطويل من Content / Drive / YouTube
+*ملاحظة من صورتك:* انت عندك CLIP FARM مثبتة وعليها 7 إشعارات - اضغط عليها في Whop وبتشوف كل فيديوهات Andrew Tate الجاهزة للقص.
 
-3. *الصق رابط الفيديو هنا في هذا البوت مباشرة* 👇
-أنا انتظرك الآن لمدة 10 دقائق...""")
+بعد ما تدخل:
+1. انسخ رابط الفيديو الطويل (YouTube أو Drive)
+2. *الصق الرابط هنا في هذا البوت مباشرة* 👇
 
-    # انتظر رد المستخدم في تليجرام
-    send("⏳ بانتظار رابط الفيديو... أرسله الآن")
+أنا انتظرك 10 دقائق...""")
 
     last_offset = 0
-    # جيب آخر update عشان ما نقرأ رسائل قديمة
     try:
         updates = get_updates()
         if updates: last_offset = updates[-1]['update_id'] + 1
     except: pass
 
     VIDEO_URL = ""
-    for _ in range(30): # 30 محاولة = 10 دقائق
+    for _ in range(30):
         updates = get_updates(last_offset)
         for upd in updates:
             last_offset = upd['update_id'] + 1
-            msg = upd.get("message",{})
-            text = msg.get("text","")
-            chat_id = str(msg.get("chat",{}).get("id",""))
-            # تأكد نفس المستخدم
-            if TELEGRAM_USER in chat_id or True: # نسمح للكل للتجربة
-                url = extract_url(text)
-                if url:
-                    VIDEO_URL = url
-                    send(f"✅ استلمت الرابط!\n{url[:80]}...\n\n⏳ أبدأ التحميل والقص بـ AI...")
-                    break
+            text = upd.get("message",{}).get("text","")
+            url = extract_url(text)
+            if url:
+                VIDEO_URL = url
+                send(f"✅ استلمت الرابط!\n{url[:80]}...\n\n⏳ أبدأ التحميل والقص...")
+                break
         if VIDEO_URL: break
         time.sleep(20)
 
     if not VIDEO_URL:
-        send("❌ ما وصلني أي رابط خلال 10 دقائق. شغل البوت مرة ثانية وأرسل الرابط بسرعة.")
+        send("❌ ما وصلني رابط. شغل البوت مرة ثانية.")
         exit()
 
-# === 2. عندنا رابط - نبدأ مصنع الكليبات ===
-CAMPAIGN_NAME = "Hustlers University"
-send(f"🏭 أبدأ المصنع...\n🎬 {CAMPAIGN_NAME}\n🔗 {VIDEO_URL[:60]}...")
-
+# تحميل وقص
+send(f"🏭 أبدأ المصنع...\n🔗 {VIDEO_URL[:60]}...")
 try:
-    # تحميل
     if "drive.google.com" in VIDEO_URL:
         subprocess.run(["pip","install","gdown","-q"], timeout=30)
         m = re.search(r'/d/([a-zA-Z0-9_-]+)', VIDEO_URL)
         if m:
-            file_id = m.group(1)
-            subprocess.run(["gdown", f"https://drive.google.com/uc?id={file_id}", "-O", "original.mp4"], timeout=180)
+            subprocess.run(["gdown", f"https://drive.google.com/uc?id={m.group(1)}", "-O", "original.mp4"], timeout=180)
     else:
         subprocess.run(["yt-dlp","-o","original.mp4","-f","mp4","--no-playlist", VIDEO_URL], timeout=180)
 
     if not os.path.exists("original.mp4"):
-        send("❌ فشل تحميل الفيديو - تأكد الرابط عام وليس خاص")
+        send("❌ فشل التحميل - تأكد الرابط عام")
         exit()
 
-    size = os.path.getsize("original.mp4")/1024/1024
-    send(f"✅ تم التحميل {size:.1f} MB - أبدأ قص 5 كليبات فيروسية بـ AI (مثل OpusClip)...")
-
     os.system("sudo apt-get update -qq && sudo apt-get install -y ffmpeg -qq > /dev/null 2>&1")
-
-    # مدة الفيديو
     try:
         r = subprocess.run(["ffprobe","-v","error","-show_entries","format=duration","-of","default=noprint_wrappers=1:nokey=1","original.mp4"], capture_output=True, text=True)
         duration = float(r.stdout.strip())
-    except:
-        duration = 1800
+    except: duration = 1800
 
     timestamps = [0, int(duration*0.18), int(duration*0.38), int(duration*0.62), int(duration*0.85)]
 
     for i, start in enumerate(timestamps[:5], 1):
         out = f"clip_{i}.mp4"
         os.system(f"ffmpeg -y -ss {start} -i original.mp4 -t 35 -vf 'scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920' -c:v libx264 -preset fast -crf 23 -c:a aac {out} -loglevel quiet")
-
         if os.path.exists(out):
-            prompt = f"""حملة {CAMPAIGN_NAME} - كليب يبدأ من الدقيقة {start//60}.
-            اكتب:
-            عنوان جذاب (Hook)
-            وصف قصير حماسي سطرين
-            7 هاشتاغات فيروسية انجليزية
-            لا تذكر كلمة scam"""
-            meta = gemini_generate(prompt)
-
-            caption = f"📹 *كليب {i}/5 - {CAMPAIGN_NAME}*\n\n{meta[:900]}"
+            meta = gemini_generate(f"حملة Clipping - كليب من الدقيقة {start//60}. عنوان جذاب ووصف وهاشتاغات انجليزية")
+            caption = f"📹 *كليب {i}/5*\n\n{meta[:900]}"
             try:
                 with open(out,'rb') as f:
                     requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendVideo",
                     data={"chat_id":TELEGRAM_USER,"caption":caption,"parse_mode":"Markdown"},
                     files={"video":f}, timeout=120, verify=False)
-            except:
-                send(f"📹 كليب {i}/5 جاهز\n\n{meta[:800]}")
-            time.sleep(2)
+            except: pass
+            time.sleep(1)
 
-    send(f"""✅ *خلصت! 5 كليبات جاهزة*
-
-انشرهم على TikTok/Reels/Shorts
-انسخ روابط النشر → ادخل {CAMPAIGN_NAME} في Whop → Submit → الأرباح تنحسب!
-
-تبي حملة ثانية؟ شغل البوت مرة ثانية.
-""")
-
+    send("✅ خلصت! 5 كليبات جاهزة للنشر في Whop")
 except Exception as e:
     send(f"❌ خطأ: {e}")
