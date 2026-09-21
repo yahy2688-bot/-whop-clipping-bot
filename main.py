@@ -24,7 +24,7 @@ def analyze(t):
     try:
         from google import genai
         client=genai.Client(api_key=GEMINI_KEY)
-        for model in ["gemini-2.5-flash","gemini-2.5-flash","gemini-1.5-flash"]:
+        for model in ["gemini-2.5-flash","gemini-3.9-flash","gemini-1.5-flash"]:
             try:
                 prompt=f"حلل هذا النص من Whop Clipping واستخرج افضل 3 حملات: {t[:7000]}"
                 res=client.models.generate_content(model=model, contents=prompt)
