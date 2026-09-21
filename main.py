@@ -2,87 +2,61 @@ import os, re, requests
 
 TELEGRAM_TOKEN=os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_USER=os.getenv("TELEGRAM_USER")
+GEMINI_KEY=os.getenv("GEMINI_KEY")
 
 def send(m):
     requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
-    json={"chat_id":TELEGRAM_USER,"text":m[:4000]}, timeout=20)
+    json={"chat_id":TELEGRAM_USER,"text":str(m)[:4000]}, timeout=20)
 
-# جيب حملات Clipping الحية من Content Rewards
 url = "https://app.contentrewards.cc/discover?type=clipping&sort=budget"
-headers = {"User-Agent": "Mozilla/5.0", "Accept": "text/html"}
+headers = {"User-Agent": "Mozilla/5.0"}
 
 try:
     r = requests.get(url, headers=headers, timeout=20)
     html = r.text
-
-    # نظف التكرار
-    # مثال في الصفحة: Whop YT Clipping - $0.50 /1K views - $10,000
-    # نستخرجها بـ regex
-    # الصفحة فيها كل حملة مكررة مرتين، بنشيل المكرر
-
-    # طريقة بسيطة: نقسم على حسب الأسطر اللي فيها $ /1K
-    campaigns = []
-    # نبحث عن النمط: Title... $X /1K views · $Y
-    # من اللي شفناه:
-    # TripRank [TikTok] - Product · $0.30 /1K views · $61,500
-
-    lines = re.findall(r'([A-Za-z0-9 \-\[\]]{3,80})\s*·\s*\$([0-9.]+)\s*/1K views\s*·\s*\$([0-9,]+)', html)
-
-    # الطريقة الثانية - لو فشل الـ regex نجيب كل الـ cards
-    if not lines:
-        # جيب العناوين
-        titles = re.findall(r'>([A-Za-z0-9 ]{3,40} \[.*?\]|[A-Za-z0-9 ]{3,40} Clipping.*?)<', html)
-        prices = re.findall(r'\$([0-9.]+)\s*/1K views', html)
-        budgets = re.findall(r'\$([0-9,]+)\s*(?:</|\\n)', html)
-        # دمج
-        for i in range(min(len(titles), len(prices))):
-            campaigns.append((titles[i].strip(), prices[i], budgets[i] if i < len(budgets) else "?"))
-    else:
-        campaigns = lines
-
-    # إزالة المكرر
+    
+    # استخرج كل الحملات: الاسم + السعر
+    # النمط: Name · $X /1K views · $Y budget
+    pattern = r'([A-Za-z0-9\s\-\[\]\(\)]{5,80}?)\s*(?:·|•).*?\$([0-9]+\.?[0-9]*)\s*/1K'
+    matches = re.findall(pattern, html)
+    
+    # نظف المكرر
     seen=set()
-    uniq=[]
-    for c in campaigns:
-        name = c[0] if isinstance(c, tuple) else str(c)
-        if name not in seen:
-            seen.add(name)
-            uniq.append(c)
-
-    if uniq:
-        msg = f"🔥 لقيت {len(uniq)} حملة Clipping حية الآن (تحديث تلقائي):\n\n"
-        for i, camp in enumerate(uniq[:15], 1):
-            if isinstance(camp, tuple) and len(camp)>=2:
-                name, price = camp[0], camp[1]
-                budget = camp[2] if len(camp)>2 else "?"
-                link = f"https://app.contentrewards.cc/discover?type=clipping"
-                msg += f"{i}. **{name.strip()}**\n 💰 ${price}/1K views | ميزانية ${budget}\n 🔗 {link}\n 📝 شروط: TikTok/Reels/YT Shorts - قص الفيديوهات الطويلة\n\n"
-            else:
-                msg += f"{i}. {camp}\n"
+    campaigns=[]
+    for name, price in matches:
+        name=name.strip()
+        if len(name)<5 or name.lower() in seen: continue
+        try:
+            p=float(price)
+            # فلتر فقط الغالي > $1
+            if p >= 1.0:
+                campaigns.append((name, p))
+                seen.add(name.lower())
+        except: continue
+    
+    # رتب من الأغلى للأرخص
+    campaigns = sorted(campaigns, key=lambda x: x[1], reverse=True)
+    
+    if campaigns:
+        msg = f"🔥 {len(campaigns)} حملة غالية (فوق $1/1K) - تحديث حي:\n\n"
+        for i,(name,price) in enumerate(campaigns[:10],1):
+            msg += f"{i}. {name} - **${price}/1K**\n   🔗 https://app.contentrewards.cc/discover?type=clipping\n\n"
+        
+        # لو عندك Gemini، خليه يلخص الأفضل
+        if GEMINI_KEY and len(msg)>100:
+            try:
+                prompt=f"رتب هذه الحملات من الأفضل: {msg}. اذكر السعر والرابط باختصار عربي حماسي."
+                url_g=f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent?key={GEMINI_KEY}"
+                res=requests.post(url_g, json={"contents":[{"parts":[{"text":prompt}]}]}, timeout=20)
+                if res.status_code==200:
+                    msg=res.json()['candidates'][0]['content']['parts'][0]['text']
+            except: pass
+        
         send(msg)
     else:
-        # لو الصفحة تغيرت، fallback
-        raise ValueError("ما لقيت حملات بالـ regex")
+        send("ما لقيت حملات فوق $1 اليوم، هذه أرخص حملات:\nhttps://app.contentrewards.cc/discover?type=clipping&sort=budget")
 
 except Exception as e:
-    send(f"""🔥 أفضل حملات Clipping شغالة الآن (مباشر من Content Rewards):
-
-1. Whop x Lacy [Viral Clipping] - $0.50 /1K views - $10,000 ميزانية
-   https://app.contentrewards.cc/discover?type=clipping
-
-2. TripRank [TikTok] - $0.30 /1K views - $61,500 ميزانية
-   Product clipping
-
-3. Spencer Pratt Clipping - $1.50 /1K views - $7,500 ميزانية
-   Entertainment
-
-4. Clipping Culture - $8-12 CPM
-   whop.com/clipping-culture
-
-5. Reach Clipping - $10 CPM + iPhone
-   whop.com/reachclipping
-
-ادخل: https://app.contentrewards.cc/discover?type=clipping&sort=budget
-الأسعار تتحدث كل ساعة!""")
+    send(f"❌ خطأ: {e}\nhttps://app.contentrewards.cc/discover?type=clipping")
 
 open("campaigns.png","wb").write(b"ok")
