@@ -1,4 +1,4 @@
-import os, requests, json
+import os, requests, re, json
 TELEGRAM_TOKEN=os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_USER=os.getenv("TELEGRAM_USER")
 GEMINI_KEY=os.getenv("GEMINI_KEY")
@@ -10,62 +10,83 @@ def send(m):
     except: pass
 
 def hunt():
-    send("🚀 بدأ الفحص (نسخة الجوال)...")
+    send("🚀 بدأ الفحص - أبحث في المكان المخفي...")
     try:
-        headers={"User-Agent":"Mozilla/5.0 (iPhone; CPU iPhone OS 17_0)"}
-        r=requests.get("https://whop.com/discover/clipping/", headers=headers, timeout=30)
+        headers={
+            "User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept":"text/html"
+        }
+        # نجرب كل الروابط الجديدة
+        urls=[
+            "https://whop.com/discover/clipping/",
+            "https://whop.com/discover/content-rewards/",
+            "https://whop.com/discover/"
+        ]
+        full_html = ""
+        for url in urls:
+            r=requests.get(url, headers=headers, timeout=30)
+            if len(r.text) > 10000:
+                full_html = r.text
+                break
+
         open("campaigns.png","wb").write(b"ok")
-        return r.text
+
+        # الطريقة السحرية: Whop يخبئ البيانات في self.__next_f
+        campaigns_text = ""
+        # ابحث عن كل self.__next_f.push
+        matches = re.findall(r'self\.__next_f\.push\((.*?)\)', full_html, re.DOTALL)
+        for m in matches:
+            if 'clipping' in m.lower() or 'cpm' in m.lower() or 'reward' in m.lower() or 'campaign' in m.lower():
+                campaigns_text += m[:5000] + "\n"
+
+        # لو ما لقينا، ناخذ كل الصفحة كاملة ونفلترها
+        if not campaigns_text:
+            # دور على أي كلمة تدل على حملة
+            if '"title"' in full_html:
+                # استخرج 20000 حرف من الوسط حيث تكون الحملات عادة
+                campaigns_text = full_html[20000:80000]
+            else:
+                campaigns_text = full_html[:15000]
+
+        return campaigns_text[:12000]
+
     except Exception as e:
         open("campaigns.png","wb").write(b"ok")
-        return f"خطأ: {e}"
+        return f"خطأ hunt: {e}"
 
-def analyze_with_gemini_direct(text):
+def analyze_direct(text):
     if not GEMINI_KEY:
-        return "❌ GEMINI_KEY غير موجود في Secrets"
-
-    # 1. نجيب قائمة الموديلات المتاحة من جوجل مباشرة
+        return "❌ GEMINI_KEY غير موجود"
     try:
+        # نفس طريقة الاتصال المباشر اللي نجحت معك
         list_url = f"https://generativelanguage.googleapis.com/v1/models?key={GEMINI_KEY}"
         models_res = requests.get(list_url, timeout=15).json()
-        # نختار أول موديل يدعم generateContent
-        available = [m['name'] for m in models_res.get('models', []) if 'generateContent' in m.get('supportedGenerationMethods', [])]
+        available = [m['name'] for m in models_res.get('models', []) if 'generateContent' in m.get('supportedGenerationMethods', [])][:3]
         if not available:
-            available = ["models/gemini-1.5-flash-latest", "models/gemini-1.5-flash", "models/gemini-pro-latest"]
-    except:
-        available = ["models/gemini-1.5-flash-latest", "models/gemini-1.5-flash"]
+            available = ["models/gemini-1.5-flash-latest"]
 
-    # 2. نجرب كل موديل برابط مباشر v1 (ليس v1beta)
-    clean_text = text[:8000].replace('"', "'")[:7000]
-    prompt = f"حلل حملات Whop Clipping هذه واستخرج افضل 3 حملات مع السعر والشروط: {clean_text}"
+        clean = text[:8000].replace('"', "'")
+        prompt = f"""أنت خبير Whop Clipping. حلل هذا الكود واستخرج أفضل 3 حملات clipping.
+        اذكر: اسم الحملة، السعر لكل 1000 مشاهدة، الشروط.
+        إذا كان الكود مشفر فك تشفيره:
+        {clean}"""
 
-    last_err = ""
-    for model_name in available[:4]: # جرب أول 4 فقط
-        try:
-            url = f"https://generativelanguage.googleapis.com/v1/{model_name}:generateContent?key={GEMINI_KEY}"
-            payload = {"contents": [{"parts": [{"text": prompt}]}]}
-            r = requests.post(url, json=payload, timeout=30)
-            if r.status_code == 200:
-                data = r.json()
-                result = data['candidates'][0]['content']['parts'][0]['text']
-                return f"✅ نجح بالموديل {model_name}\n{result}"
-            else:
-                last_err = f"{model_name}: {r.text[:300]}"
-        except Exception as e:
-            last_err = str(e)[:400]
-            continue
+        for model_name in available:
+            try:
+                url = f"https://generativelanguage.googleapis.com/v1/{model_name}:generateContent?key={GEMINI_KEY}"
+                payload = {"contents": [{"parts": [{"text": prompt}]}]}
+                r = requests.post(url, json=payload, timeout=30)
+                if r.status_code == 200:
+                    result = r.json()['candidates'][0]['content']['parts'][0]['text']
+                    return f"✅ {model_name}\n{result}"
+            except: continue
 
-    # 3. إذا فشل كل شي، نرجع تحليل بدون ذكاء اصطناعي (عشان البوت ما يفشل)
-    # نستخرج الحملات بـ regex مباشرة
-    import re
-    titles = re.findall(r'"name"\s*:\s*"([^"]{5,80})"', text)[:5]
-    if titles:
-        return f"⚠️ Gemini فشل مؤقتا ({last_err[:200]}), لكن لقيت هذه الحملات مباشرة:\n" + "\n".join([f"- {t}" for t in titles])
-    else:
-        return f"❌ فشل Gemini نهائي. آخر خطأ: {last_err}"
+        return f"فشل، لكن هذا ما وجدته في الصفحة:\n{text[:3000]}"
+    except Exception as e:
+        return f"خطأ: {e}"
 
 if __name__=="__main__":
     txt=hunt()
-    res=analyze_with_gemini_direct(txt)
+    res=analyze_direct(txt)
     print(res)
     send(f"📊 {res[:3800]}")
