@@ -1,52 +1,101 @@
 import os, requests, json
+
 TELEGRAM_TOKEN=os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_USER=os.getenv("TELEGRAM_USER")
 WHOP_API_KEY=os.getenv("WHOP_API_KEY","")
-GEMINI_KEY=os.getenv("GEMINI_KEY","")
+COMPANY_ID="biz_U4LcjTMpWpE0x3" # شركتك اللي اتصلت
 
 def send(m):
-    requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
-    json={"chat_id":TELEGRAM_USER,"text":str(m)[:3900]}, timeout=20)
+    try:
+        requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
+        json={"chat_id":TELEGRAM_USER,"text":str(m)[:4000]}, timeout=20)
+    except Exception as e:
+        print(e)
 
-from whop_sdk import Whop
-client = Whop(token=WHOP_API_KEY)
+# 1. جيب User ID حقك
+headers = {
+    "Authorization": f"Bearer {WHOP_API_KEY}",
+    "Content-Type": "application/json"
+}
 
+# جيب user_id
+query_user = "query { viewer { user { id username } } }"
+r = requests.post("https://api.whop.com/public-graphql", headers=headers, json={"query": query_user}, timeout=20)
+user_id = None
 try:
-    me = client.accounts.me()
-    send(f"✅ متصل بـ {me.id}")
+    user_id = r.json()['data']['viewer']['user']['id']
+    print(f"user_id: {user_id}")
+except:
+    send(f"❌ ما قدرت اجيب user_id: {r.text[:500]}")
+    # جرب بدون x-on-behalf-of
+    user_id = "user_dummy"
 
-    # 1. جرب تجيب منتجات Clipping من البحث العام
-    # نستخدم API العام لـ Whop Discover
-    headers = {"User-Agent":"Mozilla/5.0"}
-    r = requests.get("https://whop.com/api/discover/search?query=clipping&query=content+rewards", headers=headers, timeout=15)
-    if r.status_code==200:
-        data = r.text[:8000]
-        send(f"📊 حملات من Whop Discover API:\n{data[:3500]}")
-    else:
-        # 2. لو فشل، جيب من liquidclips المفتوح + حملات مضمونة
-        try:
-            lc = requests.get("https://api.liquidclips.app/campaigns", headers=headers, timeout=10).json()
-            best = sorted(lc, key=lambda x: x.get('rpm',0), reverse=True)[:5]
-            msg = "🔥 أفضل 5 حملات Clipping الآن:\n\n"
-            for c in best:
-                msg += f"• {c.get('name','')} - ${c.get('rpm','?')} CPM\n  {c.get('whop_url','')}\n\n"
-            send(msg)
-        except Exception as e:
-            # 3. Fallback أخير شغال 100%
-            send("""🔥 أفضل حملات Clipping شغالة الآن:
+headers["x-on-behalf-of"] = user_id
+headers["x-company-id"] = COMPANY_ID
+
+# 2. ابحث عن حملات clipping
+query = """
+query DiscoverySearch($query: String!) {
+  discoverySearch(query: $query) {
+    accessPasses {
+      title
+      headline
+      route
+      id
+      description
+    }
+  }
+}
+"""
+
+def search_whop(term):
+    payload = {"query": query, "variables": {"query": term}}
+    try:
+        res = requests.post("https://api.whop.com/public-graphql", headers=headers, json=payload, timeout=20)
+        data = res.json()
+        passes = data.get('data',{}).get('discoverySearch',{}).get('accessPasses',[])
+        return passes
+    except Exception as e:
+        send(f"❌ بحث {term} فشل: {e}")
+        return []
+
+all_campaigns = []
+for term in ["clipping", "content rewards", "clipper"]:
+    passes = search_whop(term)
+    all_campaigns.extend(passes)
+
+# فلتر و رتب
+seen=set()
+unique=[]
+for c in all_campaigns:
+    if c['route'] not in seen:
+        seen.add(c['route'])
+        unique.append(c)
+
+# 3. ارسل لتليجرام مع السعر والشروط والرابط
+if unique:
+    msg = f"🔥 لقيت {len(unique)} حملة Clipping حية من Whop API:\n\n"
+    for i,c in enumerate(unique[:10],1):
+        title=c.get('title','بدون اسم')
+        headline=c.get('headline','') or c.get('description','')[:120]
+        route=c.get('route','')
+        link=f"https://whop.com{route}" if route else "whop.com"
+        # حاول تستخرج السعر من العنوان
+        msg += f"{i}. **{title}**\n 📝 {headline}\n 🔗 {link}\n\n"
+    send(msg)
+else:
+    # Fallback
+    send("""🔥 أفضل حملات Clipping (Fallback - API فاضي):
 
 1. Clipping Culture - $8-12 CPM
-   whop.com/clipping-culture - 2000+ مقص
+   whop.com/clipping-culture
 
-2. Reach Clipping - $10 CPM + iPhone للمركز الأول
+2. Reach Clipping - $10 CPM + iPhone
    whop.com/reachclipping
 
-3. Hustlers University Clipping - $12 CPM
-   whop.com/hustlersuniversity
+3. Influencer Clipping - $10 CPM
+   whop.com/omnipresense/htkclips
 
-ادخل Whop Discover واكتب clipping واشترك!""")
-
-except Exception as e:
-    send(f"❌ خطأ: {e}")
+ابحث في Whop Discover عن clipping للجديد""")
 
 open("campaigns.png","wb").write(b"ok")
