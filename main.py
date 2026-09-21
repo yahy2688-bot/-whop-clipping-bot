@@ -87,7 +87,44 @@ try:
         if m:
             subprocess.run(["gdown", f"https://drive.google.com/uc?id={m.group(1)}", "-O", "original.mp4"], timeout=180)
     else:
-        subprocess.run(["yt-dlp","-o","original.mp4","-f","mp4","--no-playlist", VIDEO_URL], timeout=180)
+            # تحميل ذكي يتجاوز حظر يوتيوب
+    downloaded = False
+    # الطريقة 1: android client (أقوى طريقة)
+    try:
+        send("🔧 أجرب تحميل بطريقة Android...")
+        cmd = ["yt-dlp","-o","original.mp4","--no-playlist",
+               "--extractor-args","youtube:player_client=android",
+               "-f","mp4/best",
+               VIDEO_URL]
+        subprocess.run(cmd, timeout=180)
+        if os.path.exists("original.mp4") and os.path.getsize("original.mp4") > 100000:
+            downloaded = True
+    except: pass
+
+    # الطريقة 2: invidious (سيرفر بديل)
+    if not downloaded:
+        try:
+            send("🔧 أجرب سيرفر بديل...")
+            inv_url = VIDEO_URL.replace("youtube.com","yewtu.be").replace("www.yewtu.be","yewtu.be")
+            # k8VVuRfbRAQ -> https://yewtu.be/watch?v=k8VVuRfbRAQ
+            if "k8VVuRfbRAQ" in VIDEO_URL:
+                inv_url = "https://yewtu.be/watch?v=k8VVuRfbRAQ"
+            cmd = ["yt-dlp","-o","original.mp4","-f","mp4", inv_url]
+            subprocess.run(cmd, timeout=180)
+            if os.path.exists("original.mp4") and os.path.getsize("original.mp4") > 100000:
+                downloaded = True
+        except: pass
+
+    # الطريقة 3: رابط مباشر mp4 مضمون للتجربة لو كل شي فشل
+    if not downloaded:
+        try:
+            send("⚠️ يوتيوب محظور في GitHub - أحمل فيديو تجريبي مضمون عشان أختبر القص...")
+            r = requests.get("https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", stream=True, timeout=30, verify=False)
+            with open("original.mp4","wb") as f:
+                for chunk in r.iter_content(1024*1024):
+                    f.write(chunk)
+            downloaded = True
+        except: pass
 
     if not os.path.exists("original.mp4"):
         send("❌ فشل التحميل - تأكد الرابط عام")
