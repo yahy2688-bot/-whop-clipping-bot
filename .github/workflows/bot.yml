@@ -1,43 +1,30 @@
 name: ClippingProfitBot
 on:
   workflow_dispatch:
-    inputs:
-      video_url:
-        description: 'الصق هنا رابط الفيديو الأصلي من صفحة الحملة (YouTube أو Drive)'
-        required: false
-        type: string
-      campaign_name:
-        description: 'اسم الحملة'
-        required: false
-        default: 'Clipping Culture'
   schedule:
     - cron: '0 */6 * * *'
-
 permissions:
   contents: write
-
 jobs:
   hunt:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 2
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install requests yt-dlp -q
-      - run: sudo apt-get update -qq && sudo apt-get install -y ffmpeg -qq
+      - run: pip install requests --quiet
       - run: python main.py
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_USER: ${{ secrets.TELEGRAM_USER }}
+          WHOP_API_KEY: ${{ secrets.WHOP_API_KEY }}
           GEMINI_KEY: ${{ secrets.GEMINI_KEY }}
-          VIDEO_URL: ${{ inputs.video_url }}
-          CAMPAIGN_NAME: ${{ inputs.campaign_name }}
       - name: Save history
         run: |
           git config user.name "bot"
           git config user.email "bot@bot.com"
           git add sent_campaigns.json || true
-          git commit -m "update" || true
+          git commit -m "update history" || true
           git push || true
