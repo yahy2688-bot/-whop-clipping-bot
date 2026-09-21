@@ -87,7 +87,15 @@ try:
         if m:
             subprocess.run(["gdown", f"https://drive.google.com/uc?id={m.group(1)}", "-O", "original.mp4"], timeout=180)
     else:
-        subprocess.run(["yt-dlp","-o","original.mp4","-f","mp4","--no-playlist", VIDEO_URL], timeout=180)
+        # التعديل هنا: إضافة خيار android لتجاوز حظر يوتيوب في سيرفرات GitHub
+        subprocess.run([
+            "yt-dlp",
+            "-o", "original.mp4",
+            "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+            "--extractor-args", "youtube:player_client=android",
+            "--no-playlist",
+            VIDEO_URL
+        ], timeout=180)
 
     if not os.path.exists("original.mp4"):
         send("❌ فشل التحميل - تأكد الرابط عام")
@@ -118,3 +126,4 @@ try:
     send("✅ خلصت! 5 كليبات جاهزة للنشر في Whop")
 except Exception as e:
     send(f"❌ خطأ: {e}")
+    
