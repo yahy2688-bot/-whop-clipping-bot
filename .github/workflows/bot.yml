@@ -12,7 +12,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install
-        run: pip install requests google-genai
+        run: pip install requests google-generativeai
       - name: Run bot
         run: |
           touch campaigns.png
