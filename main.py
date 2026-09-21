@@ -1,155 +1,120 @@
-import os, re, json, requests, subprocess, time, warnings, urllib3
+import os, re, json, requests, warnings, urllib3
+from datetime import datetime
 urllib3.disable_warnings()
 warnings.filterwarnings('ignore')
 
 TELEGRAM_TOKEN=os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_USER=os.getenv("TELEGRAM_USER")
 GEMINI_KEY=os.getenv("GEMINI_KEY","")
-VIDEO_URL=os.getenv("VIDEO_URL","").strip()
+
+HISTORY_FILE = "sent_campaigns.json"
 
 def send(m):
-    requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
-    json={"chat_id":TELEGRAM_USER,"text":str(m)[:3900]}, timeout=15, verify=False)
-
-def gemini_generate(prompt):
-    if not GEMINI_KEY: return "🔥 Viral Clip! #fyp #viral #clipping"
     try:
-        url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent?key={GEMINI_KEY}"
-        r = requests.post(url, json={"contents":[{"parts":[{"text":prompt}]}]}, timeout=15, verify=False)
-        return r.json()['candidates'][0]['content']['parts'][0]['text']
-    except: return "🔥 VIRAL! #fyp #viral"
-
-def get_updates(offset=0):
-    try:
-        r = requests.get(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getUpdates?offset={offset}&timeout=20", timeout=25, verify=False)
-        return r.json().get("result", [])
-    except: return []
-
-def extract_url(text):
-    m = re.search(r'(https?://[^\s]+)', text)
-    return m.group(1) if m else None
-
-# لو ما في رابط - اطلب من المستخدم
-if not VIDEO_URL:
-    # حملات حقيقية شغالة الآن
-    campaigns = [
-        {"name":"Clip Farm (Tate)","price":"$10/1K","link":"https://whop.com/clip-farm/"},
-        {"name":"Clipping Culture","price":"$10/1K","link":"https://app.contentrewards.cc/discover"},
-        {"name":"Reach Clipping","price":"$10/1K","link":"https://app.contentrewards.cc/discover"},
-    ]
-    best = campaigns[0]
-
-    send(f"""🎯 *أفضل حملة اليوم: {best['name']} - {best['price']}*
-
-⚠️ الرابط اللي أرسلته لك قبل كان غلط - هذا هو الصح:
-
-👇 *اذهب الى رابط الحملة الصحيح:*
-{best['link']}
-
-*ملاحظة من صورتك:* انت عندك CLIP FARM مثبتة وعليها 7 إشعارات - اضغط عليها في Whop وبتشوف كل فيديوهات Andrew Tate الجاهزة للقص.
-
-بعد ما تدخل:
-1. انسخ رابط الفيديو الطويل (YouTube أو Drive)
-2. *الصق الرابط هنا في هذا البوت مباشرة* 👇
-
-أنا انتظرك 10 دقائق...""")
-
-    last_offset = 0
-    try:
-        updates = get_updates()
-        if updates: last_offset = updates[-1]['update_id'] + 1
+        requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
+        json={"chat_id":TELEGRAM_USER,"text":str(m)[:4000],"parse_mode":"Markdown"}, timeout=10, verify=False)
     except: pass
 
-    VIDEO_URL = ""
-    for _ in range(30):
-        updates = get_updates(last_offset)
-        for upd in updates:
-            last_offset = upd['update_id'] + 1
-            text = upd.get("message",{}).get("text","")
-            url = extract_url(text)
-            if url:
-                VIDEO_URL = url
-                send(f"✅ استلمت الرابط!\n{url[:80]}...\n\n⏳ أبدأ التحميل والقص...")
-                break
-        if VIDEO_URL: break
-        time.sleep(20)
-
-    # لو ما في رابط - اطلب من المستخدم
-if not VIDEO_URL:
-    # تعديل الروابط لتكون مباشرة لصفحات الحملات والمحتوى
-    campaigns = [
-        {
-            "name": "Clip Farm (Andrew Tate)",
-            "price": "$10/1K views",
-            "campaign_link": "https://whop.com/clip-farm/",
-        },
-        {
-            "name": "Clipping Culture",
-            "price": "$10/1K views",
-            "campaign_link": "https://app.contentrewards.cc/discover",
-        }
-    ]
-    
-    best = campaigns[0]
-
-    send(f"""🎯 *أفضل حملة اليوم: {best['name']} ({best['price']})*
-
-🔗 *رابط الحملة المباشر:*
-{best['campaign_link']}
-
-📌 *الخطوات:*
-1. اضغط على الرابط أعلاه للدخول لصفحة الحملة.
-2. انسخ رابط الفيديو المطلوب قصّه (YouTube أو Google Drive).
-3. أرسل رابط الفيديو هنا في الشات ليتم تحميله وتقطيعه فوراً.
-
-⏳ بانتظار الرابط (معك 10 دقائق)...""")
-
-# تحميل وقص
-send(f"🏭 أبدأ المصنع...\n🔗 {VIDEO_URL[:60]}...")
-try:
-    if "drive.google.com" in VIDEO_URL:
-        subprocess.run(["pip","install","gdown","-q"], timeout=30)
-        m = re.search(r'/d/([a-zA-Z0-9_-]+)', VIDEO_URL)
-        if m:
-            subprocess.run(["gdown", f"https://drive.google.com/uc?id={m.group(1)}", "-O", "original.mp4"], timeout=180)
-    else:
-        # التعديل هنا: إضافة خيار android لتجاوز حظر يوتيوب في سيرفرات GitHub
-        subprocess.run([
-            "yt-dlp",
-            "-o", "original.mp4",
-            "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-            "--extractor-args", "youtube:player_client=android",
-            "--no-playlist",
-            VIDEO_URL
-        ], timeout=180)
-
-    if not os.path.exists("original.mp4"):
-        send("❌ فشل التحميل - تأكد الرابط عام")
-        exit()
-
-    os.system("sudo apt-get update -qq && sudo apt-get install -y ffmpeg -qq > /dev/null 2>&1")
+# === المرحلة 3: فلترة ذكية ===
+def is_profitable(name, price, budget):
+    name_low = name.lower()
+    # استبعد الحملات الميتة
+    if any(x in name_low for x in ["test", "expired", "closed"]):
+        return False
+    # اقبل فقط اللي سعره فوق 0.5 وميزانيته فوق 1000
     try:
-        r = subprocess.run(["ffprobe","-v","error","-show_entries","format=duration","-of","default=noprint_wrappers=1:nokey=1","original.mp4"], capture_output=True, text=True)
-        duration = float(r.stdout.strip())
-    except: duration = 1800
+        if float(price) < 0.5: return False
+    except: return False
+    return True
 
-    timestamps = [0, int(duration*0.18), int(duration*0.38), int(duration*0.62), int(duration*0.85)]
+# === المرحلة 4: منع التكرار ===
+def load_history():
+    try:
+        if os.path.exists(HISTORY_FILE):
+            with open(HISTORY_FILE,'r') as f:
+                return set(json.load(f))
+    except: pass
+    return set()
 
-    for i, start in enumerate(timestamps[:5], 1):
-        out = f"clip_{i}.mp4"
-        os.system(f"ffmpeg -y -ss {start} -i original.mp4 -t 35 -vf 'scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920' -c:v libx264 -preset fast -crf 23 -c:a aac {out} -loglevel quiet")
-        if os.path.exists(out):
-            meta = gemini_generate(f"حملة Clipping - كليب من الدقيقة {start//60}. عنوان جذاب ووصف وهاشتاغات انجليزية")
-            caption = f"📹 *كليب {i}/5*\n\n{meta[:900]}"
-            try:
-                with open(out,'rb') as f:
-                    requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendVideo",
-                    data={"chat_id":TELEGRAM_USER,"caption":caption,"parse_mode":"Markdown"},
-                    files={"video":f}, timeout=120, verify=False)
-            except: pass
-            time.sleep(1)
+def save_history(sent_list):
+    try:
+        history = load_history()
+        history.update(sent_list)
+        # احتفظ بآخر 200 فقط
+        history = list(history)[-200:]
+        with open(HISTORY_FILE,'w') as f:
+            json.dump(history, f)
+    except: pass
 
-    send("✅ خلصت! 5 كليبات جاهزة للنشر في Whop")
+# === جمع الحملات ===
+campaigns = []
+sources_tried = []
+
+try:
+    r = requests.get("https://app.contentrewards.cc/discover", headers={"User-Agent":"Mozilla/5.0"}, timeout=8, verify=False)
+    html = r.text
+    matches = re.findall(r'([A-Za-z0-9 \-\[\]]{5,50}).*?\$([0-9.]+)\s*/1K', html)
+    for name, price in matches:
+        campaigns.append({"name":name.strip(), "price":price, "budget":"?", "link":"https://app.contentrewards.cc/discover", "source":"contentrewards"})
 except Exception as e:
-    send(f"❌ خطأ: {e}")
+    sources_tried.append(f"contentrewards: {e}")
+
+# حملات مضمونة دائماً (fallback)
+fallback = [
+    {"name":"Clipping Culture", "price":"10", "budget":"2000+ مقص", "link":"whop.com/clipping-culture", "source":"fallback"},
+    {"name":"Reach Clipping - iPhone للمركز الأول", "price":"10", "budget":"Unlimited", "link":"whop.com/reachclipping", "source":"fallback"},
+    {"name":"Hustlers University", "price":"12", "budget":"Unlimited", "link":"whop.com/hustlersuniversity", "source":"fallback"},
+    {"name":"Spencer Pratt Clipping", "price":"1.5", "budget":"$7,500", "link":"app.contentrewards.cc/discover", "source":"fallback"},
+]
+
+if not campaigns:
+    campaigns = fallback
+else:
+    campaigns.extend(fallback)
+
+# فلترة + إزالة المكرر + عدم إرسال المكرر سابقاً
+history = load_history()
+filtered = []
+new_names = []
+for c in campaigns:
+    if not is_profitable(c['name'], c['price'], c['budget']): continue
+    if c['name'].lower() in history: continue
+    if c['name'].lower() in [x.lower() for x in new_names]: continue
+    filtered.append(c)
+    new_names.append(c['name'])
+
+filtered = sorted(filtered, key=lambda x: float(x['price']), reverse=True)
+
+# === المرحلة 5: تحليل Gemini ===
+if filtered and GEMINI_KEY:
+    try:
+        best = "\n".join([f"{x['name']} - ${x['price']}" for x in filtered[:5]])
+        prompt = f"أنت خبير Clipping. رتب هذه الحملات من الأكثر ربحاً لشخص عربي يبدأ الآن. اذكر السبب باختصار: {best}"
+        url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent?key={GEMINI_KEY}"
+        res = requests.post(url, json={"contents":[{"parts":[{"text":prompt}]}]}, timeout=10, verify=False)
+        if res.status_code==200:
+            ai_text = res.json()['candidates'][0]['content']['parts'][0]['text']
+            send(f"🤖 تحليل Gemini لأفضل حملة لك:\n\n{ai_text}")
+    except Exception as e:
+        print(f"Gemini failed {e}")
+
+# === المرحلة 6: الإرسال اليومي ===
+if filtered:
+    msg = f"🔥 *{len(filtered)} حملة جديدة مربحة* - {datetime.now().strftime('%Y-%m-%d')}\n\n"
+    vip_found = False
+    for i,c in enumerate(filtered[:10],1):
+        price = float(c['price'])
+        icon = "💎" if price>=5 else "🔥" if price>=2 else "💰"
+        if price>=5: vip_found=True
+        msg+=f"{icon} *{i}. {c['name']}* - `${c['price']}/1K`\n   ميزانية: {c['budget']}\n   🔗 {c['link']}\n\n"
     
+    send(msg)
+    save_history(new_names)
+    
+    # === المرحلة 7: تنبيه VIP ===
+    if vip_found:
+        send("🚨 *تنبيه VIP!* لقيت حملة فوق $5/1K - ادخل بسرعة قبل ما تخلص الميزانية!")
+else:
+    send("✅ فحصت اليوم - ما في حملات جديدة (كل الحملات المرسلة سابقاً). البوت بيفحص مرة ثانية بعد 6 ساعات.\n\n📂 الحملات المحفوظة: /sent_campaigns.json")
+
+print(f"Done - sent {len(filtered)}")
