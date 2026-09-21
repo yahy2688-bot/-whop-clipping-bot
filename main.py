@@ -15,8 +15,6 @@ def hunt():
         headers={"User-Agent":"Mozilla/5.0 (iPhone; CPU iPhone OS 17_0)"}
         r=requests.get("https://whop.com/discover/clipping/", headers=headers, timeout=30)
         open("campaigns.png","wb").write(b"ok")
-        if r.status_code != 200:
-            return f"Whop status {r.status_code}"
         return r.text[:12000]
     except Exception as e:
         open("campaigns.png","wb").write(b"ok")
@@ -24,26 +22,27 @@ def hunt():
 
 def analyze(t):
     if not GEMINI_KEY:
-        return "خطأ: GEMINI_KEY غير موجود في GitHub Secrets!"
+        return "خطأ: GEMINI_KEY غير موجود!"
     try:
-        from google import genai
-        client=genai.Client(api_key=GEMINI_KEY)
-        # جرب كل الموديلات المتاحة
-        models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-8b"]
+        # نستخدم المكتبة القديمة المستقرة
+        import google.generativeai as genai
+        genai.configure(api_key=GEMINI_KEY)
+        
+        # جرب الموديلات الصحيحة الجديدة
+        models_to_try = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"]
         last_err = ""
-        for model in models:
+        for model_name in models_to_try:
             try:
-                res=client.models.generate_content(
-                    model=model, 
-                    contents=f"حلل حملات Whop Clipping واختر افضل 3 مع السعر: {t[:7000]}"
-                )
-                return f"✅ بالموديل {model}:\n{res.text}"
+                model = genai.GenerativeModel(model_name)
+                res = model.generate_content(f"حلل حملات Whop Clipping واختر افضل 3 مع السعر والشروط: {t[:7000]}")
+                return f"✅ بالموديل {model_name}:\n{res.text}"
             except Exception as e:
-                last_err = str(e)[:500]
+                last_err = str(e)[:600]
                 continue
-        return f"فشل كل موديلات Gemini. آخر خطأ: {last_err}"
+        
+        return f"فشل كل الموديلات. آخر خطأ: {last_err}"
     except Exception as e:
-        return f"Gemini خطأ مكتبة: {e}"
+        return f"Gemini خطأ: {e}"
 
 if __name__=="__main__":
     txt=hunt()
