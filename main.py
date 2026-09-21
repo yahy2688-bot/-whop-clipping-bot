@@ -74,9 +74,35 @@ if not VIDEO_URL:
         if VIDEO_URL: break
         time.sleep(20)
 
-    if not VIDEO_URL:
-        send("❌ ما وصلني رابط. شغل البوت مرة ثانية.")
-        exit()
+    # لو ما في رابط - اطلب من المستخدم
+if not VIDEO_URL:
+    # تعديل الروابط لتكون مباشرة لصفحات الحملات والمحتوى
+    campaigns = [
+        {
+            "name": "Clip Farm (Andrew Tate)",
+            "price": "$10/1K views",
+            "campaign_link": "https://whop.com/clip-farm/",
+        },
+        {
+            "name": "Clipping Culture",
+            "price": "$10/1K views",
+            "campaign_link": "https://app.contentrewards.cc/discover",
+        }
+    ]
+    
+    best = campaigns[0]
+
+    send(f"""🎯 *أفضل حملة اليوم: {best['name']} ({best['price']})*
+
+🔗 *رابط الحملة المباشر:*
+{best['campaign_link']}
+
+📌 *الخطوات:*
+1. اضغط على الرابط أعلاه للدخول لصفحة الحملة.
+2. انسخ رابط الفيديو المطلوب قصّه (YouTube أو Google Drive).
+3. أرسل رابط الفيديو هنا في الشات ليتم تحميله وتقطيعه فوراً.
+
+⏳ بانتظار الرابط (معك 10 دقائق)...""")
 
 # تحميل وقص
 send(f"🏭 أبدأ المصنع...\n🔗 {VIDEO_URL[:60]}...")
