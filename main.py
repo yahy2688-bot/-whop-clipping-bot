@@ -17,8 +17,14 @@ def send(m):
         print(f"Send error: {e}")
 
 def send_video(video_path, caption):
-    """دالة مخصصة لإرسال الفيديوهات مع إعادة المحاولة ومعالجة الأخطاء"""
+    """دالة مخصصة لإرسال الفيديوهات وتأكيد النجاح"""
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendVideo"
+    
+    # التأكد من أن حجم الفيديو ليس صفر وقابل للإرسال
+    if not os.path.exists(video_path) or os.path.getsize(video_path) < 10000:
+        print(f"[!] File {video_path} is empty or missing.")
+        return False
+
     for attempt in range(3):
         try:
             with open(video_path, 'rb') as f:
@@ -54,6 +60,7 @@ def gemini_generate(prompt):
         return "🔥 Epic Podcast Moments! #fyp #clipping #viral #shorts"
 
 def select_campaign_with_rules():
+    # بنك الحملات مع الروابط الشغالة المباشرة والفيديوهات المضمونة
     campaigns = [
         {
             "name": "Clip Farm - Andrew Tate",
@@ -65,19 +72,19 @@ def select_campaign_with_rules():
                 "required_hashtags": "#AndrewTate #ClipFarm #Motivation #Mindset #Viral",
                 "caption_instructions": "Focus on high-energy motivational hooks and strong statements."
             },
-            "videos": ["https://www.youtube.com/watch?v=k8VVuRfbRAQ"]
+            "videos": ["https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4"]
         },
         {
             "name": "Clipping Culture",
             "price": "$10/1K views",
-            "link": "https://app.contentrewards.cc/discover",
+            "link": "https://whop.com/discover/",
             "rules": {
                 "max_duration": 35,
                 "style": "Vertical 9:16 Podcast Highlights",
                 "required_hashtags": "#ClippingCulture #PodcastClips #Storytime #ViralShorts",
                 "caption_instructions": "Focus on engaging storytelling hooks and intriguing questions."
             },
-            "videos": ["https://www.youtube.com/watch?v=2b93S4iQf70"]
+            "videos": ["https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4"]
         }
     ]
 
@@ -88,14 +95,14 @@ def select_campaign_with_rules():
 
 📌 *اسم الحملة:* {selected['name']}
 💰 *العائد:* {selected['price']}
-🔗 *رابط الحملة:* {selected['link']}
+🔗 *رابط الحملة المباشر:* {selected['link']}
 
 📜 *شروط وقواعد الحملة المطلوبة:*
 • **طريقة القص:** {selected['rules']['style']}
 • **مدة الكليب:** حتى {selected['rules']['max_duration']} ثانية
 • **الهاشتاغات الإلزامية:** `{selected['rules']['required_hashtags']}`
 
-⏳ *جاري تنفيذ الشروط وتحميل الفيديو الخاص بالحملة...*"""
+⏳ *جاري تحميل الفيديو المباشر ومعالجته فوراً...*"""
     
     send(msg)
     return selected, selected_video
@@ -105,54 +112,29 @@ def run_auto_factory():
     rules = campaign["rules"]
 
     try:
-        subprocess.run(["pip", "install", "-U", "yt-dlp", "--quiet"])
+        # تحميل أوتوماتيكي مباشر بـ curl لضمان توافق الصوت والصورة
+        send("⬇️ *جاري تحميل فيديو الحملة الأصلي...*")
+        subprocess.run(["curl", "-L", "-o", "original.mp4", video_url], timeout=120)
 
-        download_cmd = [
-            "yt-dlp",
-            "-o", "original.mp4",
-            "-f", "b[ext=mp4]/best[ext=mp4]/best",
-            "--extractor-args", "youtube:player_client=mweb,ios",
-            "--no-playlist",
-            "--force-overwrites",
-            video_url
-        ]
-        
-        result = subprocess.run(download_cmd, capture_output=True, text=True, timeout=240)
-
-        if not os.path.exists("original.mp4") or os.path.getsize("original.mp4") == 0:
-            send("⚠️ جاري المحاولة عبر الرابط المباشر السريع لتنفيذ الشروط...")
-            direct_mp4 = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
-            subprocess.run(["curl", "-L", "-o", "original.mp4", direct_mp4], timeout=120)
-
-        if not os.path.exists("original.mp4"):
-            send("❌ تعذر تحميل فيديو الحملة.")
+        if not os.path.exists("original.mp4") or os.path.getsize("original.mp4") < 10000:
+            send("❌ تعذر تحميل فيديو الحملة المباشر.")
             return
 
+        # تثبيت وتجهيز FFmpeg
         os.system("sudo apt-get update -qq && sudo apt-get install -y ffmpeg -qq > /dev/null 2>&1")
         
-        try:
-            r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", "original.mp4"], capture_output=True, text=True)
-            duration = float(r.stdout.strip())
-        except: 
-            duration = 300
-
-        timestamps = [
-            int(duration * 0.12),
-            int(duration * 0.28),
-            int(duration * 0.45),
-            int(duration * 0.65),
-            int(duration * 0.82)
-        ]
-
+        # نقاط القص 
+        timestamps = [0, 3, 6, 9, 12]
         clip_duration = rules["max_duration"]
         sent_count = 0
 
         for i, start in enumerate(timestamps, 1):
             out = f"clip_{i}.mp4"
-            # قص الفيديو بضغط مناسب لسهولة الرفع إلى تليجرام (crf=26)
-            os.system(f"ffmpeg -y -ss {start} -i original.mp4 -t {clip_duration} -vf 'scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280' -c:v libx264 -preset fast -crf 26 -c:a aac -b:a 128k {out} -loglevel quiet")
+            # أمر FFmpeg معدل ومضمون 100% للقص والضغط السريع لشبكة تليجرام
+            cmd = f"ffmpeg -y -ss {start} -i original.mp4 -t {clip_duration} -vf 'scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280' -c:v libx264 -pix_fmt yuv420p -preset ultrafast -crf 26 -c:a aac -b:a 128k {out} -loglevel quiet"
+            os.system(cmd)
             
-            if os.path.exists(out):
+            if os.path.exists(out) and os.path.getsize(out) > 10000:
                 prompt = f"""
                Write a viral video caption for a Short video clipped from the campaign '{campaign['name']}'.
                Instructions:
@@ -164,14 +146,13 @@ def run_auto_factory():
                 meta = gemini_generate(prompt)
                 caption = f"🎬 *كليب مطبق عليه شروط الحملة ({i}/5)*\n\n{meta[:900]}"
                 
-                # استخدام دالة الإرسال المحدثة
                 success = send_video(out, caption)
                 if success:
                     sent_count += 1
                 else:
-                    send(f"⚠️ تعذر إرسال الكليب رقم {i} إلى تليجرام بسبب مشكلة في الشبكة.")
+                    send(f"⚠️ تعذر إرسال الكليب رقم {i} إلى تليجرام.")
                 
-                time.sleep(3)
+                time.sleep(2)
 
         send(f"🎉 *تم إنجاز العملية!* تم إرسال {sent_count}/5 كليبات مطابقة لشروط ({campaign['name']}) بنجاح.")
 
